@@ -7,6 +7,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <stdio.h>
+#include <sys/types.h>        
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <poll.h>
 
 using std::min;
 using std::max;
@@ -290,10 +299,42 @@ int main(int argc, char *argv[]) {
   updater->Start(10);  // high priority
 
   image_gen->Start();
+  struct sockaddr_in myaddr;
+  int s = socket(AF_INET,SOCK_DGRAM | SOCK_NONBLOCK, 0);
+  memset((char *)&myaddr, 0, sizeof(myaddr));
+  myaddr.sin_family = AF_INET;
+  myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  myaddr.sin_port = htons(5200);
 
+  if (bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0) {
+  	  perror("bind failed");
+  	  return 0;
+  }
   // Things are set up. Just wait for <RETURN> to be pressed.
-  printf("Press <RETURN> to exit and reset LEDs\n");
-  getchar();
+  printf("Press ^C to exit and reset LEDs\n");
+
+  while (1)
+  {
+	int ret;
+	struct pollfd flag;
+	printf(".\n");
+	flag.fd=s;
+	flag.revents=0;
+	flag.events=POLLIN;
+	ret = poll(&flag,1,1000);
+	if(ret>0){
+		char buff[1024];
+		memset(buff,0,sizeof(buff));
+		int q=recv(s, buff, sizeof(buff),0);
+		if(q>0){
+			printf("%d,%s",q,buff);
+			if(memcmp(buff,"stop",4)==0){
+				break;
+				}
+
+			}
+	}
+  }
 
   // Stopping threads and wait for them to join.
   delete image_gen;
