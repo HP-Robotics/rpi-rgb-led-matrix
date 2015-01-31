@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <poll.h>
+#include <ctype.h>
 
 using std::min;
 using std::max;
@@ -71,9 +72,14 @@ public:
       case 4: b = value; r = g = 0; break;
       default: r = g = b = value; break;
       }
+
       for (int x = 0; x < width; ++x)
         for (int y = 0; y < height; ++y)
-          matrix_->SetPixel(x, y, r, g, b);
+         matrix_->SetPixel(x, y, x*10, y*10, 255);
+	 // matrix_->SetPixel(x, y, 255, 255, 255);
+       //   matrix_->SetPixel(x, y, 255, 0, 0);
+	 usleep(5000);
+	
     }
   }
 };
@@ -126,23 +132,25 @@ public:
     const int min_display = cent_x - display_square / 2;
     const int max_display = cent_x + display_square / 2;
 
-    const float deg_to_rad = 2 * 3.14159265 / 360;
-    int rotation = 0;
+    const float deg_to_rad = 2 * 5.14159265 / 360;
+    int rotation = 180;
     while (running_) {
-      ++rotation;
-      usleep(15 * 1000);
-      rotation %= 360;
+   //   --rotation;
+ ++rotation;
+      usleep(15 * 750);
+      //rotation = 360;
       for (int x = min_rotate; x < max_rotate; ++x) {
         for (int y = min_rotate; y < max_rotate; ++y) {
           float disp_x, disp_y;
           Rotate(x - cent_x, y - cent_y,
                  deg_to_rad * rotation, &disp_x, &disp_y);
           if (x >= min_display && x < max_display &&
-              y >= min_display && y < max_display) { // within display square
+              y >= min_display && y+1 < max_display) { // within display square
             matrix_->SetPixel(disp_x + cent_x, disp_y + cent_y,
                               scale_col(x, min_display, max_display),
                               255 - scale_col(y, min_display, max_display),
                               scale_col(y, min_display, max_display));
+     --rotation;
           } else {
             // black frame.
             matrix_->SetPixel(disp_x + cent_x, disp_y + cent_y, 0, 0, 0);
@@ -286,9 +294,8 @@ int main(int argc, char *argv[]) {
   case 2:
     image_gen = new SimpleSquare(&m);
     break;
-
   default:
-    image_gen = new ColorPulseGenerator(&m);
+   image_gen = new ColorPulseGenerator(&m);
     break;
   }
 
@@ -304,12 +311,13 @@ int main(int argc, char *argv[]) {
   memset((char *)&myaddr, 0, sizeof(myaddr));
   myaddr.sin_family = AF_INET;
   myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  myaddr.sin_port = htons(5200);
+  myaddr.sin_port = htons(5201);
 
   if (bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0) {
   	  perror("bind failed");
   	  return 0;
   }
+
   // Things are set up. Just wait for <RETURN> to be pressed.
   printf("Press ^C to exit and reset LEDs\n");
 
@@ -328,9 +336,26 @@ int main(int argc, char *argv[]) {
 		int q=recv(s, buff, sizeof(buff),0);
 		if(q>0){
 			printf("%d,%s",q,buff);
+			for(char*p=buff+q-1;p>=buff&&isspace(*p);p--){
+					*p=0;				
+				}
 			if(memcmp(buff,"stop",4)==0){
 				break;
-				}
+				
+			}
+			if(memcmp(buff,"file",4)==0){
+			printf("%s worked\n",buff+5);
+				ImageScroller *scroller = new ImageScroller(&m);
+      				if (scroller->LoadPPM(buff+5)){
+						  delete image_gen;
+				
+						printf("%s worked\n",buff+5);
+						image_gen = scroller;	
+						  image_gen->Start();				
+					}
+     				 
+				
+			}
 
 			}
 	}
