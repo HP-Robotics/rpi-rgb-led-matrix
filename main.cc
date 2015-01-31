@@ -344,19 +344,28 @@ int main(int argc, char *argv[]) {
 				
 			}
 			if(memcmp(buff,"file",4)==0){
-			printf("%s worked\n",buff+5);
 				ImageScroller *scroller = new ImageScroller(&m);
       				if (scroller->LoadPPM(buff+5)){
 						  delete image_gen;
-				
-						printf("%s worked\n",buff+5);
 						image_gen = scroller;	
 						  image_gen->Start();				
 					}
      				 
 				
 			}
-
+			if(memcmp(buff,"text",4)==0){
+				char text[4000];
+				sprintf(text,"ppmlabel -text \"%s\" -size 8 black.ppm >HPPretty.ppm",buff+5);
+				system(text);
+				ImageScroller *scroller = new ImageScroller(&m);
+      				if (scroller->LoadPPM("HPPretty.ppm")){
+						  delete image_gen;
+						image_gen = scroller;	
+						  image_gen->Start();				
+					}
+     				 
+				
+			}
 			}
 	}
   }
