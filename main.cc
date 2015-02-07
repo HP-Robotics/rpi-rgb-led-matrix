@@ -17,6 +17,9 @@
 #include <unistd.h>
 #include <poll.h>
 #include <ctype.h>
+#include <sys/stat.h>
+
+
 
 using std::min;
 using std::max;
@@ -260,6 +263,119 @@ private:
   uint32_t horizontal_position_;
 };
 
+
+class FilezScroller : public RGBMatrixManipulator {
+public:
+  FilezScroller(RGBMatrix *m)
+    : RGBMatrixManipulator(m){
+    imagecount_=0;
+  }
+
+  
+
+  void Run() {
+    const int screen_height = matrix_->height();
+    const int screen_width = matrix_->width();
+    while (running_) {
+      if (imagecount_ ==0) {
+        usleep(100 * 1000);
+        continue;
+      }
+      usleep(100000);
+      for (int x = 0; x < screen_width; ++x) {
+        for (int y = 0; y < screen_height; ++y) {
+          const Pixel &p = getPixel((x) % width_, y);
+          // Display upside down on my desk. Lets flip :)
+          int disp_x = screen_width - x;
+          int disp_y = screen_height - y;
+          matrix_->SetPixel(disp_x, disp_y, p.red, p.green, p.blue);
+        }
+      }
+        currentimage_=(currentimage_+1)%imagecount_;
+    }
+  }
+
+  bool LoadFilez(char *base) {
+      int i, count;
+      struct stat st;
+      char buf[1024];
+      for (count = 0; 1; count++) {
+          sprintf(buf, "%s.%04d.ppm", base, count);
+          if (stat(buf, &st))
+             break; 
+      }
+      if (count == 0)
+           return false;
+
+      for (i = 0; i < count; i++) {
+          sprintf(buf, "%s.%04d.ppm", base, i);
+          images_[i] = LoadPPM(buf);
+      }
+      imagecount_ = count;
+      currentimage_ = 0;
+      return true;
+  }
+
+private:
+  struct Pixel {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+  };
+// _very_ simplified. Can only read binary P6 PPM. Expects newlines in headers
+  // Not really robust. Use at your own risk :)
+  Pixel *LoadPPM(const char *filename) {
+    Pixel *image;
+    FILE *f = fopen(filename, "r");
+    if (f == NULL) return NULL;
+    char header_buf[256];
+    const char *line = ReadLine(f, header_buf, sizeof(header_buf));
+#define EXIT_WITH_MSG(m) { fprintf(stderr, "%s: %s |%s", filename, m, line); \
+      fclose(f); return false; }
+    if (sscanf(line, "P6 ") == EOF)
+      EXIT_WITH_MSG("Can only handle P6 as PPM type.");
+    line = ReadLine(f, header_buf, sizeof(header_buf));
+    if (!line || sscanf(line, "%d %d ", &width_, &height_) != 2)
+      EXIT_WITH_MSG("Width/height expected");
+    int value;
+    line = ReadLine(f, header_buf, sizeof(header_buf));
+    if (!line || sscanf(line, "%d ", &value) != 1 || value != 255)
+      EXIT_WITH_MSG("Only 255 for maxval allowed.");
+    const size_t pixel_count = width_ * height_;
+    image = new Pixel [ pixel_count ];
+    assert(sizeof(Pixel) == 3);   // we make that assumption.
+    if (fread(image, sizeof(Pixel), pixel_count, f) != pixel_count) {
+      line = "";
+      EXIT_WITH_MSG("Not enough pixels read.");
+    }
+#undef EXIT_WITH_MSG
+    fclose(f);
+    fprintf(stderr, "Read image with %dx%d\n", width_, height_);
+    return image;
+  }
+
+  // Read line, skip comments.
+  char *ReadLine(FILE *f, char *buffer, size_t len) {
+    char *result;
+    do {
+      result = fgets(buffer, len, f);
+    } while (result != NULL && result[0] == '#');
+    return result;
+  }
+
+  const Pixel &getPixel(int x, int y) {
+    static Pixel dummy;
+    if (x < 0 || x > width_ || y < 0 || y > height_) return dummy;
+    return images_[currentimage_][x + width_ * y];
+    
+  }
+
+  int width_;
+  int height_;
+  Pixel *images_[10000];
+  int imagecount_;
+  int currentimage_;
+};
 int main(int argc, char *argv[]) {
   int demo = 0;
   if (argc > 1) {
@@ -339,20 +455,41 @@ int main(int argc, char *argv[]) {
 			for(char*p=buff+q-1;p>=buff&&isspace(*p);p--){
 					*p=0;				
 				}
+
 			if(memcmp(buff,"stop",4)==0){
+             			delete image_gen;
+                                image_gen = NULL;
+                  		m.ClearScreen();
+                  		m.UpdateScreen();	
+				usleep(2000);			
 				break;
-				
 			}
-			if(memcmp(buff,"file",4)==0){
+
+            		if(memcmp(buff,"clear",5)==0){
+				  delete image_gen;
+                                  image_gen = NULL;
+				  m.ClearScreen();
+				  m.UpdateScreen();
+						
+			}
+			if(memcmp(buff,"file ",5)==0){
 				ImageScroller *scroller = new ImageScroller(&m);
       				if (scroller->LoadPPM(buff+5)){
-						  delete image_gen;
-						image_gen = scroller;	
-						  image_gen->Start();				
-					}
-     				 
-				
+					  delete image_gen;
+				  	  image_gen = scroller;	
+					  image_gen->Start();
+				}
 			}
+
+			if(memcmp(buff,"files",5)==0){
+                     		FilezScroller *scroller = new FilezScroller(&m);
+                     		if (scroller->LoadFilez(buff + 6)) {
+                         		delete image_gen;
+					image_gen = scroller;
+					image_gen->Start();
+                 		}
+			}
+
 			if(memcmp(buff,"text",4)==0){
 				char text[4000];
 				sprintf(text,"ppmlabel -text \"%s\" -size 8 black.ppm >HPPretty.ppm",buff+5);
@@ -360,24 +497,24 @@ int main(int argc, char *argv[]) {
 				ImageScroller *scroller = new ImageScroller(&m);
       				if (scroller->LoadPPM("HPPretty.ppm")){
 						  delete image_gen;
-						image_gen = scroller;	
-						  image_gen->Start();				
-					}
-     				 
-				
+						  image_gen = scroller;	
+						  image_gen->Start();
+				}
 			}
-			}
+		}
 	}
   }
 
   // Stopping threads and wait for them to join.
   delete image_gen;
   delete updater;
-
+usleep(5000);
   // Final thing before exit: clear screen and update once, so that
   // we don't have random pixels burn
   m.ClearScreen();
   m.UpdateScreen();
+
+
 
   return 0;
 }
