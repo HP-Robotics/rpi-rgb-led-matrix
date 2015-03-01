@@ -492,13 +492,53 @@ int main(int argc, char *argv[]) {
 
 			if(memcmp(buff,"text",4)==0){
 				char text[4000];
-				sprintf(text,"ppmlabel -text \"%s\" -size 8 black.ppm >HPPretty.ppm",buff+5);
+                                char *bg = "black";
+                                char *fg = "red";
+                                char *p = buff + 5;
+                                if (*p == '/') {
+                                    bg = p + 1;
+                                    p = strchr(p + 1, '/');
+                                    if (!p)
+                                        continue; 
+                                    *p++ = '\0';
+                                }
+                                
+                                if (*p == '#') {
+                                    fg = p + 1;
+                                    p = strchr(p + 1, '#');
+                                    if (!p)
+                                        continue; 
+                                    *p++ = '\0';
+                                }
+                                int approx_len = 10 * strlen(p);
+                                int use_anim = 0;
+                                if (*p == '!') {
+                                    approx_len = 32;
+                                    use_anim++;
+                                    p++;
+                                }
+                                
+				sprintf(text, "ppmmake %s %d 16 >/tmp/tmp.ppm", bg, approx_len);
 				system(text);
-				ImageScroller *scroller = new ImageScroller(&m);
-      				if (scroller->LoadPPM("HPPretty.ppm")){
-						  delete image_gen;
-						  image_gen = scroller;	
-						  image_gen->Start();
+				sprintf(text, "ppmlabel -y 13 -colour %s -text \"%s \" -size 14 /tmp/tmp.ppm >/tmp/generated.0000.ppm",
+                                          fg, p);
+				system(text);
+
+                                if (use_anim) {
+					FilezScroller *scroller = new FilezScroller(&m);
+					if (scroller->LoadFilez("/tmp/generated")) {
+						delete image_gen;
+						image_gen = scroller;
+						image_gen->Start();
+					}
+				}
+				else {
+					ImageScroller *scroller = new ImageScroller(&m);
+					if (scroller->LoadPPM("/tmp/generated.0000.ppm")){
+							  delete image_gen;
+							  image_gen = scroller;	
+							  image_gen->Start();
+					}
 				}
 			}
 		}
