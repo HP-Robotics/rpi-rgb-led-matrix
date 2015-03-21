@@ -518,6 +518,11 @@ int main(int argc, char *argv[]) {
                                     p++;
                                 }
                                 
+                                while (*p == '*') {
+                                    approx_len += 10;
+                                    p++;
+                                }
+
 				sprintf(text, "ppmmake %s %d 16 >/tmp/tmp.ppm", bg, approx_len);
 				system(text);
 				sprintf(text, "ppmlabel -y 13 -colour %s -text \"%s \" -size 14 /tmp/tmp.ppm >/tmp/generated.0000.ppm",
