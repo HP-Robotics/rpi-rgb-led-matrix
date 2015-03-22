@@ -224,6 +224,15 @@ public:
     : RGBMatrixManipulator(m), image_(NULL), horizontal_position_(0)
   {
   }
+  ~ImageScroller()
+  {
+    if (image_)
+    {
+      delete [] image_;
+      image_ = NULL;
+    }
+    running_ = false;
+  }
 
   // _very_ simplified. Can only read binary P6 PPM. Expects newlines in headers
   // Not really robust. Use at your own risk :)
@@ -319,7 +328,7 @@ private:
   const Pixel &getPixel(int x, int y)
   {
     static Pixel dummy;
-    if (x < 0 || x > width_ || y < 0 || y > height_) return dummy;
+    if (x < 0 || x > width_ || y < 0 || y > height_ || image_ == NULL) return dummy;
     return image_[x + width_ * y];
   }
 
@@ -339,7 +348,17 @@ public:
     imagecount_=0;
   }
 
-
+  ~FilezScroller()
+  {
+    if (imagecount_ > 0)
+    {
+      int i;
+      running_ = false;
+      for (i = 0; i < imagecount_; i++)
+        delete [] images_[i];
+      imagecount_ = 0;
+    }
+  }
 
   void Run()
   {
@@ -355,7 +374,7 @@ public:
       usleep(100000);
       for (int x = 0; x < screen_width; ++x)
       {
-        for (int y = 0; y < screen_height; ++y)
+        for (int y = 0; y < screen_height && running_; ++y)
         {
           const Pixel &p = getPixel((x) % width_, y);
           // Display upside down on my desk. Lets flip :)
@@ -369,7 +388,8 @@ public:
           matrix_->SetPixel(disp_x, disp_y, p.red, p.green, p.blue);
         }
       }
-      currentimage_=(currentimage_+1)%imagecount_;
+      if (running_ && imagecount_ > 0)
+        currentimage_=(currentimage_+1)%imagecount_;
     }
   }
 
@@ -378,6 +398,14 @@ public:
     int i, count;
     struct stat st;
     char buf[1024];
+
+    if (imagecount_ > 0)
+    {
+      for (i = 0; i < imagecount_; i++)
+        delete [] images_[i];
+      imagecount_ = 0;
+    }
+
     for (count = 0; 1; count++)
     {
       sprintf(buf, "%s.%04d.ppm", base, count);
@@ -477,7 +505,6 @@ void sim_callback(LED_HANDLE_T p, unsigned long key)
   if (key == 'q' || key == XK_Escape)
   {
     terminated = true;
-    led_term(p);
     ledsim_join(p);
   }
 }
@@ -486,6 +513,7 @@ void sim_callback(LED_HANDLE_T p, unsigned long key)
 int main(int argc, char *argv[])
 {
   bool simulator = false;
+  LED_HANDLE_T sim = 0;
 
   int argi = 1;
   if (argc > argi && strcmp(argv[argi], "simulate") == 0)
@@ -510,7 +538,7 @@ int main(int argc, char *argv[])
   }
   else
   {
-    LED_HANDLE_T sim = led_init();
+    sim = led_init();
     m = new RGBMatrix(sim);
     ledsim_set_x_callback(sim, sim_callback);
   }
@@ -660,7 +688,11 @@ int main(int argc, char *argv[])
               continue;
             *p++ = '\0';
           }
-          int approx_len = 10 * strlen(p);
+
+          if (strlen(p) == 0)
+              continue;
+
+          int approx_len = + 10 * strlen(p);
           int use_anim = 0;
           if (*p == '!')
           {
@@ -715,6 +747,13 @@ int main(int argc, char *argv[])
   m->ClearScreen();
   m->UpdateScreen();
 
+  delete m;
+
+  if (simulator)
+  {
+    led_term(sim);
+    usleep(5000);
+  }
 
 
   return 0;

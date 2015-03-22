@@ -1,0 +1,38 @@
+
+IP=`/sbin/ifconfig eth0 | grep 'inet addr' | cut -f 2 -d ':' | cut -f 1 -d ' '`
+
+# Make some /tmp/test files...
+ppmmake black 50 16 >/tmp/black50.ppm
+ppmlabel -y 13 -colour red -text "test1" -size 14 /tmp/black50.ppm >/tmp/test1.ppm
+ppmmake white 50 16 >/tmp/white50.ppm
+ppmlabel -y 13 -colour blue -text "test2" -size 14 /tmp/white50.ppm >/tmp/test2.ppm
+
+ppmmake black 32 16 >/tmp/black32.ppm
+ppmmake white 32 16 >/tmp/white32.ppm
+
+for x in 0 1 2 3 4 5 6 7 8 9; do
+  ppmlabel -y 13 -colour red -text "$x" -size 14 /tmp/black32.ppm >/tmp/test3.000$x.ppm
+done
+for x in 0 1 2 3 4 5 6 7 8 9; do
+  ppmlabel -y 13 -colour green -text "$x" -size 14 /tmp/white32.ppm >/tmp/test4.000$x.ppm
+done
+
+NC="nc -u $IP 5201"
+
+if [ -z "$VALGRIND" ] ; then
+  ./led-matrix &
+else
+  valgrind --leak-check=full --show-leak-kinds=all --log-file=v.log ./led-matrix simulate &
+fi
+
+sleep 2
+echo "text hello mom"               | $NC -w 4
+echo 'text !mom'                    | $NC -w 2
+echo "text /green/green"            | $NC -w 2
+echo "text #blue#blue"              | $NC -w 2
+echo "text /blue/#yellow#yellblue"  | $NC -w 4
+echo "file /tmp/test1.ppm"          | $NC -w 4
+echo "files /tmp/test3"             | $NC -w 2
+echo "file /tmp/test2.ppm"          | $NC -w 4
+echo "files /tmp/test4"             | $NC -w 2
+echo "stop"                         | $NC -w 1
