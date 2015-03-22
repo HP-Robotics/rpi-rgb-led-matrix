@@ -1,5 +1,6 @@
 #include "thread.h"
 #include "led-matrix.h"
+#include "ledsim.h"
 
 #include <assert.h>
 #include <unistd.h>
@@ -78,9 +79,7 @@ public:
 
       for (int x = 0; x < width; ++x)
         for (int y = 0; y < height; ++y)
-         matrix_->SetPixel(x, y, x*10, y*10, 255);
-	 // matrix_->SetPixel(x, y, 255, 255, 255);
-       //   matrix_->SetPixel(x, y, 255, 0, 0);
+         matrix_->SetPixel(x, y, r, g, b);
 	 usleep(5000);
 	
     }
@@ -226,8 +225,13 @@ public:
         for (int y = 0; y < screen_height; ++y) {
           const Pixel &p = getPixel((horizontal_position_ + x) % width_, y);
           // Display upside down on my desk. Lets flip :)
-          int disp_x = screen_width - x;
-          int disp_y = screen_height - y;
+          int disp_x = (screen_width - 1) - x;
+          int disp_y = (screen_height - 1) - y;
+          if (matrix_->IsSimulator())
+          {
+              disp_x = x;
+              disp_y = y;
+          }
           matrix_->SetPixel(disp_x, disp_y, p.red, p.green, p.blue);
         }
       }
@@ -286,8 +290,13 @@ public:
         for (int y = 0; y < screen_height; ++y) {
           const Pixel &p = getPixel((x) % width_, y);
           // Display upside down on my desk. Lets flip :)
-          int disp_x = screen_width - x;
-          int disp_y = screen_height - y;
+          int disp_x = (screen_width - 1) - x;
+          int disp_y = (screen_height - 1) - y;
+          if (matrix_->IsSimulator())
+          {
+              disp_x = x;
+              disp_y = y;
+          }
           matrix_->SetPixel(disp_x, disp_y, p.red, p.green, p.blue);
         }
       }
@@ -295,7 +304,7 @@ public:
     }
   }
 
-  bool LoadFilez(char *base) {
+  bool LoadFilez(const char *base) {
       int i, count;
       struct stat st;
       char buf[1024];
@@ -331,7 +340,7 @@ private:
     char header_buf[256];
     const char *line = ReadLine(f, header_buf, sizeof(header_buf));
 #define EXIT_WITH_MSG(m) { fprintf(stderr, "%s: %s |%s", filename, m, line); \
-      fclose(f); return false; }
+      fclose(f); return NULL; }
     if (sscanf(line, "P6 ") == EOF)
       EXIT_WITH_MSG("Can only handle P6 as PPM type.");
     line = ReadLine(f, header_buf, sizeof(header_buf));
@@ -377,28 +386,44 @@ private:
   int currentimage_;
 };
 int main(int argc, char *argv[]) {
+  bool simulator = false;
+
+  int argi = 1;
+  if (argc > argi && strcmp(argv[argi], "simulate") == 0)
+  {
+      simulator = true;
+      argi++;
+  }
   int demo = 0;
-  if (argc > 1) {
-    demo = atoi(argv[1]);
+  if (argc > argi) {
+    demo = atoi(argv[argi++]);
   }
   fprintf(stderr, "Using demo %d\n", demo);
 
-  GPIO io;
-  if (!io.Init())
-    return 1;
+  RGBMatrix *m;
+  if (! simulator)
+  {
+    GPIO io;
+    if (!io.Init())
+      return 1;
+    m = new RGBMatrix(&io);
+  }
+  else
+  {
+    LED_HANDLE_T sim = led_init();
+    m = new RGBMatrix(sim);
+  }
 
-  RGBMatrix m(&io);
-    
   RGBMatrixManipulator *image_gen = NULL;
   switch (demo) {
   case 0:
-    image_gen = new RotatingBlockGenerator(&m);
+    image_gen = new RotatingBlockGenerator(m);
     break;
 
   case 1:
-    if (argc > 2) {
-      ImageScroller *scroller = new ImageScroller(&m);
-      if (!scroller->LoadPPM(argv[2]))
+    if (argc > argi) {
+      ImageScroller *scroller = new ImageScroller(m);
+      if (!scroller->LoadPPM(argv[argi++]))
         return 1;
       image_gen = scroller;
     } else {
@@ -408,17 +433,17 @@ int main(int argc, char *argv[]) {
     break;
 
   case 2:
-    image_gen = new SimpleSquare(&m);
+    image_gen = new SimpleSquare(m);
     break;
   default:
-   image_gen = new ColorPulseGenerator(&m);
+   image_gen = new ColorPulseGenerator(m);
     break;
   }
 
   if (image_gen == NULL)
     return 1;
 
-  RGBMatrixManipulator *updater = new DisplayUpdater(&m);
+  RGBMatrixManipulator *updater = new DisplayUpdater(m);
   updater->Start(10);  // high priority
 
   image_gen->Start();
@@ -459,8 +484,8 @@ int main(int argc, char *argv[]) {
 			if(memcmp(buff,"stop",4)==0){
              			delete image_gen;
                                 image_gen = NULL;
-                  		m.ClearScreen();
-                  		m.UpdateScreen();	
+                  		m->ClearScreen();
+                  		m->UpdateScreen();	
 				usleep(2000);			
 				break;
 			}
@@ -468,12 +493,12 @@ int main(int argc, char *argv[]) {
             		if(memcmp(buff,"clear",5)==0){
 				  delete image_gen;
                                   image_gen = NULL;
-				  m.ClearScreen();
-				  m.UpdateScreen();
+				  m->ClearScreen();
+				  m->UpdateScreen();
 						
 			}
 			if(memcmp(buff,"file ",5)==0){
-				ImageScroller *scroller = new ImageScroller(&m);
+				ImageScroller *scroller = new ImageScroller(m);
       				if (scroller->LoadPPM(buff+5)){
 					  delete image_gen;
 				  	  image_gen = scroller;	
@@ -482,7 +507,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if(memcmp(buff,"files",5)==0){
-                     		FilezScroller *scroller = new FilezScroller(&m);
+                     		FilezScroller *scroller = new FilezScroller(m);
                      		if (scroller->LoadFilez(buff + 6)) {
                          		delete image_gen;
 					image_gen = scroller;
@@ -492,8 +517,12 @@ int main(int argc, char *argv[]) {
 
 			if(memcmp(buff,"text",4)==0){
 				char text[4000];
-                                char *bg = "black";
-                                char *fg = "red";
+				char black[10];
+				char red[10];
+                                strcpy(black, "black");
+                                strcpy(red, "red");
+                                char *bg = black;
+                                char *fg = red;
                                 char *p = buff + 5;
                                 if (*p == '/') {
                                     bg = p + 1;
@@ -530,7 +559,7 @@ int main(int argc, char *argv[]) {
 				system(text);
 
                                 if (use_anim) {
-					FilezScroller *scroller = new FilezScroller(&m);
+					FilezScroller *scroller = new FilezScroller(m);
 					if (scroller->LoadFilez("/tmp/generated")) {
 						delete image_gen;
 						image_gen = scroller;
@@ -538,7 +567,7 @@ int main(int argc, char *argv[]) {
 					}
 				}
 				else {
-					ImageScroller *scroller = new ImageScroller(&m);
+					ImageScroller *scroller = new ImageScroller(m);
 					if (scroller->LoadPPM("/tmp/generated.0000.ppm")){
 							  delete image_gen;
 							  image_gen = scroller;	
@@ -556,8 +585,8 @@ int main(int argc, char *argv[]) {
 usleep(5000);
   // Final thing before exit: clear screen and update once, so that
   // we don't have random pixels burn
-  m.ClearScreen();
-  m.UpdateScreen();
+  m->ClearScreen();
+  m->UpdateScreen();
 
 
 

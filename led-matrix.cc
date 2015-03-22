@@ -69,15 +69,40 @@ RGBMatrix::RGBMatrix(GPIO *io) : io_(io) {
   assert(result == b.raw);
   assert(kPWMBits < 8);    // only up to 7 makes sense.
   ClearScreen();
+  simulator_ = false;
+}
+
+RGBMatrix::RGBMatrix(LED_HANDLE_T h) : simulator_handle(h) {
+    io_ = NULL;
+    simulator_ = true;
+}
+
+bool RGBMatrix::IsSimulator() {
+    return simulator_;
 }
 
 void RGBMatrix::ClearScreen() {
-  memset(&bitplane_, 0, sizeof(bitplane_));
+  if (simulator_)
+  {
+      int h, w, width, height;
+      led_get_size(simulator_handle, &width, &height);
+      for (w = 0; w < width; w++)
+          for (h = 0; h < height; h++)
+              led_set_pixel(simulator_handle, w, h, 0, 0, 0, 0);
+  }
+  else
+      memset(&bitplane_, 0, sizeof(bitplane_));
 }
 
 void RGBMatrix::SetPixel(uint8_t x, uint8_t y,
                          uint8_t red, uint8_t green, uint8_t blue) {
   if (x >= width() || y >= height()) return;
+
+  if (simulator_)
+  {
+      led_set_pixel(simulator_handle, x, y, 255, red, green, blue);
+      return;
+  }
 
   // My setup: A single panel connected  [>] 16 rows & 32 columns.
   
@@ -106,6 +131,9 @@ void RGBMatrix::SetPixel(uint8_t x, uint8_t y,
 }
 
 void RGBMatrix::UpdateScreen() {
+  if (simulator_)
+      return;
+
   IoBits serial_mask;   // Mask of bits we need to set while clocking in.
   serial_mask.bits.r1 = serial_mask.bits.g1 = serial_mask.bits.b1 = 1;
   serial_mask.bits.r2 = serial_mask.bits.g2 = serial_mask.bits.b2 = 1;

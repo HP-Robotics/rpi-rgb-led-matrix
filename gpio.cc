@@ -49,6 +49,7 @@ uint32_t GPIO::InitOutputs(uint32_t outputs) {
 // Based on code example found in http://elinux.org/RPi_Low-level_peripherals
 bool GPIO::Init() {
   int mem_fd;
+  gpio_port_ = NULL;
   if ((mem_fd = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) {
     perror("can't open /dev/mem: ");
     return false;

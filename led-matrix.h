@@ -6,11 +6,14 @@
 
 #include <stdint.h>
 #include "gpio.h"
+#include "ledsim.h"
 
 class RGBMatrix {
  public:
   RGBMatrix(GPIO *io);
+  RGBMatrix(LED_HANDLE_T simulator);
   void ClearScreen();
+  bool IsSimulator();
 
   // Here the set-up  [>] - Only one 16x32 panel
   int width() const { return 32; }
@@ -24,7 +27,9 @@ class RGBMatrix {
 
 
 private:
-  GPIO *const io_;
+  GPIO *io_;
+  bool simulator_;
+  LED_HANDLE_T simulator_handle;
 
   enum {
     kDoubleRows = 8,     // Physical constant of the used board.
