@@ -249,6 +249,8 @@ public:
     const char *line = ReadLine(f, header_buf, sizeof(header_buf));
 #define EXIT_WITH_MSG(m) { fprintf(stderr, "%s: %s |%s", filename, m, line); \
       fclose(f); return false; }
+    if (!line)
+      EXIT_WITH_MSG("Empty file.");
     if (sscanf(line, "P6 ") == EOF)
       EXIT_WITH_MSG("Can only handle P6 as PPM type.");
     line = ReadLine(f, header_buf, sizeof(header_buf));
@@ -443,6 +445,8 @@ private:
     const char *line = ReadLine(f, header_buf, sizeof(header_buf));
 #define EXIT_WITH_MSG(m) { fprintf(stderr, "%s: %s |%s", filename, m, line); \
       fclose(f); return NULL; }
+    if (!line)
+      EXIT_WITH_MSG("Empty file.");
     if (sscanf(line, "P6 ") == EOF)
       EXIT_WITH_MSG("Can only handle P6 as PPM type.");
     line = ReadLine(f, header_buf, sizeof(header_buf));
@@ -665,9 +669,11 @@ int main(int argc, char *argv[])
         {
           char text[4000];
           char black[10];
+          char pink[20];
           char red[10];
           strcpy(black, "black");
           strcpy(red, "red");
+          strcpy(pink, "rgb:ff/0/99");
           char *bg = black;
           char *fg = red;
           char *p = buff + 5;
@@ -687,6 +693,10 @@ int main(int argc, char *argv[])
             if (!p)
               continue;
             *p++ = '\0';
+
+            /* X11 pink isn't quite right for the sign board... */
+            if (strcmp(fg, pink) == 0)
+                fg = pink;
           }
 
           if (strlen(p) == 0)
