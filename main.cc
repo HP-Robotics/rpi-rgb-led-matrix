@@ -3,6 +3,8 @@
 #include "ledsim.h"
 
 #include <assert.h>
+#include <signal.h>
+#include <X11/keysym.h>
 #include <unistd.h>
 #include <math.h>
 #include <stdio.h>
@@ -385,6 +387,25 @@ private:
   int imagecount_;
   int currentimage_;
 };
+
+bool terminated = false;
+
+void signal_handler(int s)
+{
+    terminated = true;
+}
+
+void sim_callback(LED_HANDLE_T p, unsigned long key)
+{
+    if (key == 'q' || key == XK_Escape)
+    {
+        terminated = true;
+        led_term(p);
+        ledsim_join(p);
+    }
+}
+
+
 int main(int argc, char *argv[]) {
   bool simulator = false;
 
@@ -412,6 +433,7 @@ int main(int argc, char *argv[]) {
   {
     LED_HANDLE_T sim = led_init();
     m = new RGBMatrix(sim);
+    ledsim_set_x_callback(sim, sim_callback);
   }
 
   RGBMatrixManipulator *image_gen = NULL;
@@ -459,10 +481,13 @@ int main(int argc, char *argv[]) {
   	  return 0;
   }
 
+  signal(SIGTERM, signal_handler);
+  signal(SIGINT, signal_handler);
+
   // Things are set up. Just wait for <RETURN> to be pressed.
   printf("Press ^C to exit and reset LEDs\n");
 
-  while (1)
+  while (! terminated)
   {
 	int ret;
 	struct pollfd flag;
@@ -582,7 +607,7 @@ int main(int argc, char *argv[]) {
   // Stopping threads and wait for them to join.
   delete image_gen;
   delete updater;
-usleep(5000);
+  usleep(5000);
   // Final thing before exit: clear screen and update once, so that
   // we don't have random pixels burn
   m->ClearScreen();
