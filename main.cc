@@ -18,6 +18,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <ctype.h>
 #include <sys/stat.h>
@@ -516,6 +517,10 @@ void sim_callback(LED_HANDLE_T p, unsigned long key)
 
 int main(int argc, char *argv[])
 {
+  char pink[20];
+  char default_fg[128];
+  char default_bg[128];
+  GPIO io;
   bool simulator = false;
   LED_HANDLE_T sim = 0;
 
@@ -535,10 +540,21 @@ int main(int argc, char *argv[])
   RGBMatrix *m;
   if (! simulator)
   {
-    GPIO io;
+    char *sw;
     if (!io.Init())
       return 1;
     m = new RGBMatrix(&io);
+    if ((sw = getenv("USE_SWITCH")))
+    {
+      int fd;
+      fd = open("/sys/class/gpio/export", O_WRONLY);
+      if (fd > 0)
+      {
+          write(fd, sw, strlen(sw));
+          write(fd, "\n", 1);
+          close(fd);
+      }
+    }
   }
   else
   {
@@ -600,6 +616,14 @@ int main(int argc, char *argv[])
   signal(SIGTERM, signal_handler);
   signal(SIGINT, signal_handler);
 
+  strcpy(pink, "rgb:ff/0/99");
+  strcpy(default_bg, "black");
+  if (getenv("BACKGROUND_COLOR"))
+    strcpy(default_bg, getenv("BACKGROUND_COLOR"));
+  strcpy(default_fg, "red");
+  if (getenv("FOREGROUND_COLOR"))
+    strcpy(default_fg, getenv("FOREGROUND_COLOR"));
+
   // Things are set up. Just wait for <RETURN> to be pressed.
   printf("Press ^C to exit and reset LEDs\n");
 
@@ -607,6 +631,26 @@ int main(int argc, char *argv[])
   {
     int ret;
     struct pollfd flag;
+    char *sw;
+
+    if ((sw = getenv("USE_SWITCH")))
+    {
+      int fd;
+      char fname[256];
+      sprintf(fname, "/sys/class/gpio/gpio%s/value", sw);
+      fd = open(fname, O_RDONLY);
+      if (fd > 0)
+      {
+        char buf[2];
+        memset(buf, 0, sizeof(buf));
+        read(fd, buf, 2);
+        if (buf[0] == '0')
+          m->Pause();
+        if (buf[0] == '1')
+          m->Go();
+        close(fd);
+      }
+    }
     printf(".\n");
     flag.fd=s;
     flag.revents=0;
@@ -624,6 +668,12 @@ int main(int argc, char *argv[])
         {
           *p=0;
         }
+
+        if(memcmp(buff,"pause",5)==0  && image_gen)
+            m->Pause();
+
+        if(memcmp(buff,"go",2)==0  && image_gen)
+            m->Go();
 
         if(memcmp(buff,"stop",4)==0)
         {
@@ -668,14 +718,8 @@ int main(int argc, char *argv[])
         if(memcmp(buff,"text",4)==0)
         {
           char text[4000];
-          char black[10];
-          char pink[20];
-          char red[10];
-          strcpy(black, "black");
-          strcpy(red, "red");
-          strcpy(pink, "rgb:ff/0/99");
-          char *bg = black;
-          char *fg = red;
+          char *bg = default_bg;
+          char *fg = default_fg;
           char *p = buff + 5;
           if (*p == '/')
           {
@@ -693,10 +737,6 @@ int main(int argc, char *argv[])
             if (!p)
               continue;
             *p++ = '\0';
-
-            /* X11 pink isn't quite right for the sign board... */
-            if (strcmp(fg, pink) == 0)
-                fg = pink;
           }
 
           if (strlen(p) == 0)
@@ -717,12 +757,17 @@ int main(int argc, char *argv[])
             p++;
           }
 
+          /* X11 pink isn't quite right for the sign board... */
+          if (strcmp(bg, "pink") == 0)
+              bg = pink;
+          if (strcmp(fg, "pink") == 0)
+              fg = pink;
+
           sprintf(text, "ppmmake %s %d 16 >/tmp/tmp.ppm", bg, approx_len);
           system(text);
           sprintf(text, "ppmlabel -y 13 -colour %s -text \"%s \" -size 14 /tmp/tmp.ppm >/tmp/generated.0000.ppm",
                   fg, p);
           system(text);
-
           if (use_anim)
           {
             FilezScroller *scroller = new FilezScroller(m);

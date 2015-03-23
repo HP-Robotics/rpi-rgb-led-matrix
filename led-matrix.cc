@@ -81,6 +81,14 @@ bool RGBMatrix::IsSimulator() {
     return simulator_;
 }
 
+void RGBMatrix::Pause() {
+    pause_ = true;
+}
+
+void RGBMatrix::Go() {
+    pause_ = false;
+}
+
 void RGBMatrix::ClearScreen() {
   if (simulator_)
   {
@@ -97,6 +105,9 @@ void RGBMatrix::ClearScreen() {
 void RGBMatrix::SetPixel(uint8_t x, uint8_t y,
                          uint8_t red, uint8_t green, uint8_t blue) {
   if (x >= width() || y >= height()) return;
+
+  if (pause_)
+    red = green = blue = 0;
 
   if (simulator_)
   {

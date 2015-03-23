@@ -14,6 +14,8 @@ class RGBMatrix {
   RGBMatrix(LED_HANDLE_T simulator);
   void ClearScreen();
   bool IsSimulator();
+  void Pause();
+  void Go();
 
   // Here the set-up  [>] - Only one 16x32 panel
   int width() const { return 32; }
@@ -29,6 +31,7 @@ class RGBMatrix {
 private:
   GPIO *io_;
   bool simulator_;
+  bool pause_;
   LED_HANDLE_T simulator_handle;
 
   enum {
